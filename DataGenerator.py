@@ -108,7 +108,6 @@ class DataGenerator:
         images, labels = self.sample_around_anchors(K, N)
         images = self.resize(images, h, w).astype(np.float32)
         labels = np.array(labels)
-        print(images.shape, "after resize", K, N)
         image_batches = []
         label_batches = []
 
