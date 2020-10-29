@@ -72,15 +72,12 @@ class DataGenerator:
         #    print(d)
         return weights, zs
 
-    def sample_around_anchors(self):
+    def sample_around_anchors(self, K, N):
         resolution_start, resolution_end = self.resolution_start, self.resolution_end
         mapping, synthesis = self.mapping, self.synthesis
         w_anchors, zs = self.rejection_sample()
         start = int(np.log2(resolution_start)) - 2
         end = int(np.log2(resolution_end)) - 2
-
-        N = len(w_anchors)
-        K = self.K
 
         images = []
         labels = []
@@ -90,6 +87,7 @@ class DataGenerator:
             w_random = mapping.predict(z)
             w_anchor = np.repeat(w_anchor, K, axis=0)
             w_mix = np.concatenate([w_random[:, :start], w_anchor[:, start:end], w_random[:, end:]], axis=1)
+
             images.append(synthesis.predict(w_mix))
             labels.append(np.repeat(eye[n, :][None, :], K, axis=0))
 
@@ -106,15 +104,13 @@ class DataGenerator:
             images_out.append(np.array(imgs_out))
         return np.array(images_out)
 
-    def sample_batch(self, batch_size, shuffle=True, swap=False, h=64, w=64):
-        images, labels = self.sample_around_anchors()
+    def sample_batch(self, batch_size, K, N, shuffle=True, swap=False, h=64, w=64):
+        images, labels = self.sample_around_anchors(K, N)
         images = self.resize(images, h, w).astype(np.float32)
         labels = np.array(labels)
-
+        print(images.shape, "after resize", K, N)
         image_batches = []
         label_batches = []
-
-        N, K = self.N, self.K
 
         eye = np.eye(N)
         for _ in range(batch_size):
@@ -134,7 +130,7 @@ class DataGenerator:
                 images = np.swapaxes(images, 0, 1)
                 # K, N, N
                 labels = np.swapaxes(labels, 0, 1)
-            image_batches.append(np.reshape(images, (1, N, K, h, w, 3)))
+            image_batches.append(np.reshape(images, (N, K, h, w, 3)))
             label_batches.append(labels)
 
         all_image_batches = np.stack(image_batches, axis=0)
