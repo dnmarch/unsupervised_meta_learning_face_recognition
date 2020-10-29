@@ -47,6 +47,7 @@ class DataGenerator:
         N = self.N
         d_avg, d_max, d_std = self.d_avg, self.d_max, self.d_std
         z = np.random.random((1, 512))
+        mapping, synthesis = self.mapping, self.synthesis
         weights = [mapping.predict(z)]
         zs = [z]
         num_points_per_sample = 100
@@ -73,6 +74,7 @@ class DataGenerator:
 
     def sample_around_anchors(self):
         resolution_start, resolution_end = self.resolution_start, self.resolution_end
+        mapping, synthesis = self.mapping, self.synthesis
         w_anchors, zs = self.rejection_sample()
         start = int(np.log2(resolution_start)) - 2
         end = int(np.log2(resolution_end)) - 2
