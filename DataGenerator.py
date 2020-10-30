@@ -1,10 +1,10 @@
 from skimage.transform import resize
 import random
 import numpy as np
-
+import tensorflow as tf
 
 class DataGenerator:
-    def __init__(self, mapping, synthesis, K=2, N=5, resolution_start=16, resolution_end=256):
+    def __init__(self, mapping, synthesis, K=2, N=5, resolution_start=32, resolution_end=128):
         self.mapping = mapping
         self.synthesis = synthesis
         self.resolution_start = resolution_start
@@ -13,6 +13,10 @@ class DataGenerator:
         self.N = N
         self.d_avg, self.d_max, self.d_std = self.compute_w_distribution()
 
+    def set_resolution(self, resolution_start, resolution_end):
+        self.resolution_start = resolution_start
+        self.resolution_end = resolution_end
+        
     def compute_w_distribution(self, num_points=1000):
         mapping, synthesis = self.mapping, self.synthesis
         resolution_start, resolution_end = self.resolution_start, self.resolution_end
@@ -64,6 +68,7 @@ class DataGenerator:
                 if dists[idx] > d_avg + d_std * num_std:
                     weights.append(w_new[idx:idx + 1])
                     zs.append(z_new[idx:idx + 1])
+                    # print("find a point")
                     if len(weights) == N:
                         break
         # check to verify
@@ -93,9 +98,10 @@ class DataGenerator:
 
         return images, labels
 
-    def resize(self, images, h_new, w_new):
+    def resize2(self, images, h_new, w_new):
         N = len(images)
         images_out = []
+
         for imgs in images:
             imgs_out = []
             for i in range(imgs.shape[0]):
@@ -104,13 +110,29 @@ class DataGenerator:
             images_out.append(np.array(imgs_out))
         return np.array(images_out)
 
+    def resize(self, images, h_new, w_new):
+        images_out = []
+        for img_k in images:
+            
+            img_k = np.rollaxis(img_k, 1, 4)
+            
+            img_k_resize = tf.image.resize(img_k, [h_new, w_new])
+            
+            images_out.append(img_k_resize.numpy())
+        
+        # tensorflow bug, very slow if don't convert tensor to numpy first
+        images_out = np.array(images_out)
+        
+        return images_out
+
+        
+
     def sample_batch(self, batch_size, K, N, shuffle=True, swap=False, h=64, w=64):
         images, labels = self.sample_around_anchors(K, N)
-        images = self.resize(images, h, w).astype(np.float32)
+        images = self.resize(images, h, w)
         labels = np.array(labels)
         image_batches = []
         label_batches = []
-
         eye = np.eye(N)
         for _ in range(batch_size):
 
@@ -123,16 +145,16 @@ class DataGenerator:
 
                 labels = batch[:, :, :N]
                 images = batch[:, :, N:]
+                images = np.reshape(images, (N, K, h, w, 3))
 
             if swap:
                 # K, N, -1
                 images = np.swapaxes(images, 0, 1)
                 # K, N, N
                 labels = np.swapaxes(labels, 0, 1)
-            image_batches.append(np.reshape(images, (N, K, h, w, 3)))
+            image_batches.append(images)
             label_batches.append(labels)
-
         all_image_batches = np.stack(image_batches, axis=0)
         all_label_batches = np.stack(label_batches, axis=0)
-
+        
         return all_image_batches.astype(np.float32), all_label_batches.astype(np.float32)
