@@ -188,7 +188,7 @@ class DataGenerator:
     def sample_batch(self, batch_size, K, N, num_std=0.1, noise_std=0.005, shuffle=True, swap=False, h=64, w=64):
         #images, labels = self.sample_around_anchors(K, N)
         w_anchors, z_anchors = self.find_anchors(K, N)
-        images, labels = self.sample_around_anchors(K, N, num_std, noise_std, w_anchors, z_anchors)
+        images, labels = self.sample_around_anchors(K, N, w_anchors, z_anchors, num_std, noise_std)
         
         images = self.resize(images, h, w)
         labels = np.array(labels)
