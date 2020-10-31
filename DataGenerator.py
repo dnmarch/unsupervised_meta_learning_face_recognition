@@ -132,7 +132,7 @@ class DataGenerator:
         #    print(d)
         return weights, z_anchors
 
-    def sample_around_anchors(self, K, N, w_anchors, z_anchors, num_std = 0.05, batch_size = 300):
+    def sample_around_anchors(self, K, N, w_anchors, z_anchors, num_std = 0.1, noise_std = 0.005, batch_size = 500):
         resolution_start, resolution_end = self.resolution_start, self.resolution_end
         mapping, synthesis = self.mapping, self.synthesis
         d_avg, d_max, d_std = self.d_avg, self.d_max, self.d_std
@@ -145,12 +145,18 @@ class DataGenerator:
         for n, (w_anchor, z_anchor) in enumerate(zip(w_anchors, z_anchors)):
             # print(w_anchor.shape, z_anchor.shape, "w_anchor, z_anchor")
             w_nears = w_anchor
+            num_run = 0
             while w_nears.shape[0] < K:
+                num_run += 1
                 # temporary set noise std to be 0.01; can optimize to increase sampling efficient
-                z_noise = z_anchor + np.random.normal(0, 0.003, (batch_size, z_anchor.shape[-1]))
+                z_noise = z_anchor + np.random.normal(0, 0.005, (batch_size, z_anchor.shape[-1]))
                 w_noise = mapping.predict(z_noise)
                 dists = self.compute_distance(w_noise, w_anchor)
                 w_nears = np.concatenate([w_nears, w_noise[dists < num_std * d_std]], axis=0)
+                if num_run > 2:
+                    print("warning: standard deviation set to be too high")
+                if num_run == 1 and w_nears.shape[0] == batch_size:
+                    print("warning: noise standard deviation set to be too low")
             w_nears = w_nears[:K]
             
             z = np.random.random((K, 512))
@@ -179,10 +185,10 @@ class DataGenerator:
 
         
 
-    def sample_batch(self, batch_size, K, N, shuffle=True, swap=False, h=64, w=64):
+    def sample_batch(self, batch_size, K, N, num_std=0.1, noise_std=0.005, shuffle=True, swap=False, h=64, w=64):
         #images, labels = self.sample_around_anchors(K, N)
         w_anchors, z_anchors = self.find_anchors(K, N)
-        images, labels = self.sample_around_anchors(K, N, w_anchors, z_anchors)
+        images, labels = self.sample_around_anchors(K, N, num_std, noise_std, w_anchors, z_anchors)
         
         images = self.resize(images, h, w)
         labels = np.array(labels)
