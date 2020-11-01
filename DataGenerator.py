@@ -11,11 +11,12 @@ class DataGenerator:
         self.resolution_start = resolution_start
         self.resolution_end = resolution_end
         self.start = (int(np.log2(resolution_start)) - 2) * 2
-        self.end = (1 + int(np.log2(resolution_start)) - 2) * 2
+        self.end = (int(np.log2(resolution_end)) - 2) * 2 + 2
         self.K = K
         self.N = N
         # self.d_avg, self.d_max, self.d_std = self.compute_w_distribution()
         self.w_avg, self.w_std = self.compute_w_distribution(5000)
+        print(self.start, self.end)
 
     def set_resolution(self, resolution_start, resolution_end):
         self.resolution_start = resolution_start
