@@ -16,6 +16,9 @@ class DataGenerator:
         self.N = N
         # self.d_avg, self.d_max, self.d_std = self.compute_w_distribution()
         self.w_avg, self.w_std = self.compute_w_distribution(5000)
+
+        self.resolution_start_default = self.resolution_start
+        self.resolution_end_default = self.resolution_end
         print(self.start, self.end)
 
     def set_resolution(self, resolution_start, resolution_end):
@@ -121,7 +124,28 @@ class DataGenerator:
 
         return images_out
 
-    def sample_batch(self, batch_size, K, N, num_std=0.1, noise_std=0.005, shuffle=True, swap=False, h=64, w=64):
+    def shuffle_resolution(self, eps=0.3):
+        rnd = np.random.random()
+        if rnd > eps:
+            self.set_resolution(self.resolution_start_default, self.resolution_end_default)
+            return
+
+
+        start = np.random.choice((4, 8, 16, 32, 64, 128, 256))
+        end_resolutions = []
+        r = start
+        while r < 1024:
+            r *= 2
+            end_resolutions.append(r)
+
+        end = np.random.choice(end_resolutions)
+        self.set_resolution(start, end)
+
+
+
+    def sample_batch(self, batch_size, K, N, num_std=0.1, noise_std=0.005, shuffle=True, swap=False, h=64, w=64, shuffle_resolutoin=True):
+        if shuffle_resolutoin:
+            self.shuffle_resolution()
         # images, labels = self.sample_around_anchors(K, N)
         w_anchors, z_anchors = self.find_anchors(N)
         images, labels = self.sample_around_anchors(K, N, w_anchors, z_anchors, num_std, noise_std)
