@@ -143,7 +143,7 @@ class DataGenerator:
 
 
 
-    def sample_batch(self, batch_size, K, N, num_std=0.1, noise_std=0.005, shuffle=True, swap=False, h=64, w=64, shuffle_resolutoin=True):
+    def sample_batch(self, batch_size, K, N, num_std=0.1, noise_std=0.005, shuffle=True, swap=False, h=64, w=64, shuffle_resolutoin=False):
         if shuffle_resolutoin:
             self.shuffle_resolution()
         # images, labels = self.sample_around_anchors(K, N)
