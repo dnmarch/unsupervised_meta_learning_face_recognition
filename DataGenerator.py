@@ -12,13 +12,28 @@ class DataGenerator:
         self.resolution_end = resolution_end
         self.start = (int(np.log2(resolution_start)) - 2) * 2
         self.end = (int(np.log2(resolution_end)) - 2) * 2 + 2
-        self.K = K
-        self.N = N
-        # self.d_avg, self.d_max, self.d_std = self.compute_w_distribution()
-        self.w_avg, self.w_std = self.compute_w_distribution(5000)
 
         self.resolution_start_default = self.resolution_start
         self.resolution_end_default = self.resolution_end
+
+        self.K = K
+        self.N = N
+        # self.d_avg, self.d_max, self.d_std = self.compute_w_distribution()
+        self.w_avg = self.w_stds = None
+
+        self.w_avgs = {}
+        self.w_stds = {}
+
+        for start in (4, 8, 16, 32, 64):
+            end = start * 4
+            self.set_resolution(start, start * 4)
+            w_avg, w_std = self.compute_w_distribution(5000)
+            self.w_avgs[start, end] = w_avg
+            self.w_stds[start, end] = w_std
+
+        self.w_avg = self.w_avgs[self.resolution_start, self.resolution_end]
+        self.w_std = self.w_stds[self.resolution_start, self.resolution_end]
+
 
         print(self.start, self.end)
 
@@ -27,6 +42,11 @@ class DataGenerator:
         self.resolution_end = resolution_end
         self.start = (int(np.log2(resolution_start)) - 2) * 2
         self.end = (1 + int(np.log2(resolution_start)) - 2) * 2
+
+        if self.w_avg is not None:
+            self.w_avg = self.w_avgs[resolution_start, resolution_end]
+            self.w_std = self.w_stds[resolution_start, resolution_end]
+
 
     def compute_w_distribution(self, num_points=5000):
         mapping, synthesis = self.mapping, self.synthesis
@@ -74,7 +94,7 @@ class DataGenerator:
         # print(np.mean(dists), w_std, "distance distribution")
         return w_anchors, z_anchors
 
-    def sample_around_anchors(self, K, N, w_anchors, z_anchors, num_std=0.3, noise_std=0.0001, batch_size=5000):
+    def sample_around_anchors(self, K, N, w_anchors, z_anchors, num_std=0.3, noise_std=0.00015, batch_size=8000):
 
         mapping, synthesis = self.mapping, self.synthesis
         start, end = self.start, self.end
@@ -133,7 +153,7 @@ class DataGenerator:
 
 
         start = np.random.choice((4, 8, 16, 32, 64))
-        weights = np.array([1, 2, 3, 5, 2])
+        weights = np.array([1, 1, 1, 1, 1])
         weights = weights / np.sum(weights)
 
         end = start * 4
@@ -141,7 +161,7 @@ class DataGenerator:
 
 
 
-    def sample_batch(self, batch_size, K, N, num_std=0.1, noise_std=0.005, shuffle=True, swap=False, h=64, w=64, shuffle_resolutoin=True):
+    def sample_batch(self, batch_size, K, N, num_std=0.1, noise_std=0.005, shuffle=True, swap=False, h=64, w=64, shuffle_resolutoin=False):
         if shuffle_resolutoin:
             self.shuffle_resolution()
         # images, labels = self.sample_around_anchors(K, N)
