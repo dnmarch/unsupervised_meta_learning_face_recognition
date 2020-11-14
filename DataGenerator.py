@@ -25,8 +25,8 @@ class DataGenerator:
         self.w_stds = {}
 
         for start in (4, 8, 16, 32, 64):
-            end = start * 4
-            self.set_resolution(start, start * 4)
+            end = start * 8
+            self.set_resolution(start, start * 8)
             w_avg, w_std = self.compute_w_distribution(5000)
             self.w_avgs[start, end] = w_avg
             self.w_stds[start, end] = w_std
@@ -34,14 +34,14 @@ class DataGenerator:
         self.w_avg = self.w_avgs[self.resolution_start, self.resolution_end]
         self.w_std = self.w_stds[self.resolution_start, self.resolution_end]
 
-
+        self.set_resolution(self.resolution_start_default, self.resolution_end_default)
         print(self.start, self.end)
 
     def set_resolution(self, resolution_start, resolution_end):
         self.resolution_start = resolution_start
         self.resolution_end = resolution_end
         self.start = (int(np.log2(resolution_start)) - 2) * 2
-        self.end = (1 + int(np.log2(resolution_start)) - 2) * 2
+        self.end = (int(np.log2(resolution_end)) - 2) * 2 + 2
 
         if self.w_avg is not None:
             self.w_avg = self.w_avgs[resolution_start, resolution_end]
@@ -156,7 +156,7 @@ class DataGenerator:
         weights = np.array([1, 1, 1, 1, 1])
         weights = weights / np.sum(weights)
 
-        end = start * 4
+        end = start * 8
         self.set_resolution(start, end)
 
 
