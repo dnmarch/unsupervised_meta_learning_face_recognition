@@ -9,7 +9,7 @@ import os
 import random
 import csv
 import pickle
-from DataLoader import *
+# from DataLoader import *
 ## Loss utilities
 def plot_acc(val_acc, name, save=False):
     import matplotlib.pyplot as plt
@@ -344,8 +344,7 @@ def run_maml(data_generator, data_loader, n_way=5, k_shot=1, meta_batch_size=25,
              meta_train_inner_update_lr=-1):
     # call data_generator and get data with k_shot*2 samples per class
 
-
-
+    
 
     # set up MAML model
     dim_output = data_loader.dim_output
