@@ -9,8 +9,20 @@ import os
 import random
 import csv
 import pickle
-
+from DataLoader import *
 ## Loss utilities
+def plot_acc(val_acc, name, save=False):
+    import matplotlib.pyplot as plt
+    title = f'{name}_Val_Acc'
+    plt.plot(val_acc)
+    plt.title(title)
+    plt.xlabel('Iterations')
+    plt.ylabel('Accuracy')
+    if save:
+        plt.savefig(f"{title}.png")
+    plt.show()
+    plt.clf()
+
 def cross_entropy_loss(pred, label, k_shot):
     return tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=pred, labels=tf.stop_gradient(label)) / k_shot)
 
@@ -70,7 +82,7 @@ class ConvLayers(tf.keras.layers.Layer):
 
 class MAML(tf.keras.Model):
 
-    def __init__(self, dim_input=1, dim_output=1,
+    def __init__(self, dim_input=(1,1,1), dim_output=1,
                  num_inner_updates=1,
                  inner_update_lr=0.4, num_filters=32, k_shot=5, learn_inner_update_lr=False):
         super(MAML, self).__init__()
@@ -79,8 +91,10 @@ class MAML(tf.keras.Model):
         self.inner_update_lr = inner_update_lr
         self.loss_func = partial(cross_entropy_loss, k_shot=k_shot)
         self.dim_hidden = num_filters
-        self.channels = 1
-        self.img_size = int(np.sqrt(self.dim_input / self.channels))
+        self.channels = dim_input[2]
+        self.img_size = dim_input[0]
+        # self.img_size = int(np.sqrt(self.dim_input / self.channels))
+
 
         # outputs_ts[i] and losses_ts_post[i] are the output and loss after i+1 inner gradient updates
         losses_tr_pre, outputs_tr, losses_ts_post, outputs_ts = [], [], [], []
@@ -224,3 +238,144 @@ def outer_eval_step(inp, model, meta_batch_size=25, num_inner_updates=1):
     total_accuracies_ts = [tf.reduce_mean(accuracy_ts) for accuracy_ts in accuracies_ts]
 
     return outputs_tr, outputs_ts, total_loss_tr_pre, total_losses_ts, total_accuracy_tr_pre, total_accuracies_ts
+
+
+def meta_train_fn(model, exp_string, data_generator, data_loader,
+                  n_way=5, meta_train_iterations=15000, meta_batch_size=25,
+                  log=True, logdir='/tmp/data', k_shot=1, num_inner_updates=1, meta_lr=0.001):
+
+    SUMMARY_INTERVAL = 10
+    SAVE_INTERVAL = 100
+    PRINT_INTERVAL = 10
+    TEST_PRINT_INTERVAL = PRINT_INTERVAL * 5
+
+    pre_accuracies, post_accuracies = [], []
+
+    optimizer = tf.keras.optimizers.Adam(learning_rate=meta_lr)
+    accuracies = []
+    num_std = 0.15
+    noise_std = 0.0008
+
+
+
+    im_width, im_height, channels = model.dim_input
+
+
+    for itr in range(meta_train_iterations):
+
+        images, labels = data_generator.sample_batch(32, k_shot*2, n_way, num_std=num_std, noise_std=noise_std, shuffle=True, swap=False, h=im_height, w=im_width, shuffle_resolutoin=True)
+        input_tr = images[:, :, :k_shot, :]
+        input_ts = images[:, :, k_shot:, :]
+        label_tr = labels[:, :, :k_shot, :]
+        label_ts = labels[:, :, k_shot:, :]
+        inp = (input_tr, input_ts, label_tr, label_ts)
+
+        result = outer_train_step(inp, model, optimizer, meta_batch_size=meta_batch_size,
+                                  num_inner_updates=num_inner_updates)
+
+        if itr % SUMMARY_INTERVAL == 0:
+            pre_accuracies.append(result[-2])
+            post_accuracies.append(result[-1][-1])
+
+        if (itr != 0) and itr % PRINT_INTERVAL == 0:
+            print_str = 'Iteration %d: pre-inner-loop train accuracy: %.5f, post-inner-loop test accuracy: %.5f' % (
+            itr, np.mean(pre_accuracies), np.mean(post_accuracies))
+            print(print_str)
+            pre_accuracies, post_accuracies = [], []
+
+        if (itr != 0) and itr % TEST_PRINT_INTERVAL == 0:
+            images, labels = data_loader.sample_batch('meta_val', meta_batch_size)
+
+            input_tr = images[:, :, :k_shot, :]
+            input_ts = images[:, :, k_shot:, :]
+            label_tr = labels[:, :, :k_shot, :]
+            label_ts = labels[:, :, k_shot:, :]
+
+            inp = (input_tr, input_ts, label_tr, label_ts)
+            result = outer_eval_step(inp, model, meta_batch_size=meta_batch_size, num_inner_updates=num_inner_updates)
+
+            print(
+                'Meta-validation pre-inner-loop train accuracy: %.5f, meta-validation post-inner-loop test accuracy: %.5f' % (
+                result[-2], result[-1][-1]))
+            accuracies.append(result[-1][-1])
+    model_file = logdir + '/' + exp_string + '/model' + str(itr)
+    print("Saving to ", model_file)
+    model.save_weights(model_file)
+    print(accuracies)
+    filename = "./maml_{}_{}_{}".format(n_way, k_shot, int(meta_lr*1000))
+    np.save(filename, np.array(accuracies))
+
+def meta_test_fn(model, data_loader, n_way=5, meta_batch_size=25, k_shot=1,
+                 num_inner_updates=1):
+
+    np.random.seed(1)
+    random.seed(1)
+
+    meta_test_accuracies = []
+    NUM_META_TEST_POINTS = 500
+    for _ in range(NUM_META_TEST_POINTS):
+
+        images, labels = data_loader.sample_batch("meta_test", meta_batch_size)
+        input_tr = images[:, :, :k_shot, :]
+        input_ts = images[:, :, k_shot:, :]
+        label_tr = labels[:, :, :k_shot, :]
+        label_ts = labels[:, :, k_shot:, :]
+        #############################
+        inp = (input_tr, input_ts, label_tr, label_ts)
+        result = outer_eval_step(inp, model, meta_batch_size=meta_batch_size, num_inner_updates=num_inner_updates)
+
+        meta_test_accuracies.append(result[-1][-1])
+
+    meta_test_accuracies = np.array(meta_test_accuracies)
+    means = np.mean(meta_test_accuracies)
+    stds = np.std(meta_test_accuracies)
+    ci95 = 1.96 * stds / np.sqrt(NUM_META_TEST_POINTS)
+
+    print('Mean meta-test accuracy/loss, stddev, and confidence intervals')
+    print((means, stds, ci95))
+
+
+def run_maml(data_generator, data_loader, n_way=5, k_shot=1, meta_batch_size=25, meta_lr=0.001,
+             inner_update_lr=0.4, num_filters=32, num_inner_updates=1,
+             learn_inner_update_lr=False,
+             resume=False, resume_itr=0, log=True, logdir='/tmp/data',
+             data_path='./omniglot_resized', meta_train=True,
+             meta_train_iterations=15000, meta_train_k_shot=-1,
+             meta_train_inner_update_lr=-1):
+    # call data_generator and get data with k_shot*2 samples per class
+
+
+
+
+    # set up MAML model
+    dim_output = data_loader.dim_output
+    dim_input = data_loader.dim_input
+    model = MAML(dim_input,
+                 dim_output,
+                 num_inner_updates=num_inner_updates,
+                 inner_update_lr=inner_update_lr,
+                 k_shot=k_shot,
+                 num_filters=num_filters,
+                 learn_inner_update_lr=learn_inner_update_lr)
+
+    if meta_train_k_shot == -1:
+        meta_train_k_shot = k_shot
+    if meta_train_inner_update_lr == -1:
+        meta_train_inner_update_lr = inner_update_lr
+
+    exp_string = 'cls_' + str(n_way) + '.mbs_' + str(meta_batch_size) + '.k_shot_' + str(
+        meta_train_k_shot) + '.inner_numstep_' + str(num_inner_updates) + '.inner_updatelr_' + str(
+        meta_train_inner_update_lr) + '.learn_inner_update_lr_' + str(learn_inner_update_lr)
+
+    if meta_train:
+        meta_train_fn(model, exp_string, data_generator, data_loader,
+                      n_way, meta_train_iterations, meta_batch_size, log, logdir,
+                      k_shot, num_inner_updates, meta_lr)
+    else:
+        meta_batch_size = 1
+
+        model_file = tf.train.latest_checkpoint(logdir + '/' + exp_string)
+        print("Restoring model weights from ", model_file)
+        model.load_weights(model_file)
+
+        meta_test_fn(model, data_loader, n_way, meta_batch_size, k_shot, num_inner_updates)
