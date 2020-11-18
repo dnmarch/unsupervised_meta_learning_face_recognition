@@ -62,21 +62,21 @@ class DataGenerator:
         z = np.random.random((num_points, 512))
         w = mapping.predict(z) # N, 18, 512
 
-        w_other = np.concatenate([w[:, :start], w[:, end:]])
+        w_other = np.concatenate([w[:, :start], w[:, end:]], axis=1)
 
         return np.mean(w[start:end]), np.std(w[start:end]), np.mean(w_other), np.std(w_other)
 
 
     def get_w_other(self, w):
         start, end = self.start, self.end
-        w_other = np.concatenate([w[:, :start], w[:, end:]])
+        w_other = np.concatenate([w[:, :start], w[:, end:]], axis=1)
         return w_other
 
     def find_anchors(self, N, num_std=2, batch_size=100, in_class=False):
 
         start, end = self.start, self.end
         w_avg, w_std = self.w_avg, self.w_std
-        if not in_class:
+        if in_class:
             w_avg, w_std = self.w_avg_other, self.w_std_other
 
         z = np.random.random((1, 512))
@@ -87,7 +87,8 @@ class DataGenerator:
         while len(w_anchors) < N:
             z_new = np.random.random((batch_size, 512))
             w_new = mapping.predict(z_new)
-            w_new_other = np.concatenate([w_new[:, :start], w_new[:, end:]])
+            w_new_other = self.get_w_other(w_new)
+
             if not in_class:
                 dists = np.array([np.linalg.norm(w_new[:, start:end, :] - w[:, start:end, :], axis=(1, 2)) for w in w_anchors]).flatten()
             else:
@@ -149,8 +150,9 @@ class DataGenerator:
                 z = np.random.random((K, 512))
                 w_random = mapping.predict(z)
             else:
-                z, w_random = self.find_anchors(K, 3, in_class=True)
-                w_random = np.array(w_random)
+                w_random, _ = self.find_anchors(K, 3, in_class=True)
+                w_random = np.array(w_random).squeeze(1)
+
 
             w_mix = np.concatenate([w_random[:, :start], w_nears[:, start:end], w_random[:, end:]], axis=1)
 
@@ -193,7 +195,7 @@ class DataGenerator:
             self.shuffle_resolution()
         # images, labels = self.sample_around_anchors(K, N)
         w_anchors, z_anchors = self.find_anchors(N)
-        images, labels = self.sample_around_anchors(K, N, w_anchors, z_anchors, num_std, noise_std, force_dist)
+        images, labels = self.sample_around_anchors(K, N, w_anchors, z_anchors, num_std, noise_std, force_dist=force_dist)
 
         images = self.resize(images, h, w)
         labels = np.array(labels)
