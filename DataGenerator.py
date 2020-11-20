@@ -24,22 +24,15 @@ class DataGenerator:
         self.w_avgs = {}
         self.w_stds = {}
 
-        self.w_avgs_other = {}
-        self.w_stds_other = {}
-
         for start in (4, 8, 16, 32, 64):
             end = start * 8
             self.set_resolution(start, start * 8)
-            w_avg, w_std, w_avg_other, w_std_other = self.compute_w_distribution(5000)
+            w_avg, w_std = self.compute_w_distribution(5000)
             self.w_avgs[start, end] = w_avg
             self.w_stds[start, end] = w_std
-            self.w_avgs_other[start, end] = w_avg_other
-            self.w_stds_other[start, end] = w_std_other
 
         self.w_avg = self.w_avgs[self.resolution_start, self.resolution_end]
         self.w_std = self.w_stds[self.resolution_start, self.resolution_end]
-        self.w_avg_other = self.w_avgs_other[self.resolution_start, self.resolution_end]
-        self.w_std_other = self.w_stds_other[self.resolution_start, self.resolution_end]
 
         self.set_resolution(self.resolution_start_default, self.resolution_end_default)
         print(self.start, self.end)
@@ -61,24 +54,13 @@ class DataGenerator:
 
         z = np.random.random((num_points, 512))
         w = mapping.predict(z) # N, 18, 512
-
-        w_other = np.concatenate([w[:, :start], w[:, end:]], axis=1)
-
-        return np.mean(w[start:end]), np.std(w[start:end]), np.mean(w_other), np.std(w_other)
+        return np.mean(w[start:end]), np.std(w[start:end])
 
 
-    def get_w_other(self, w):
-        start, end = self.start, self.end
-        w_other = np.concatenate([w[:, :start], w[:, end:]], axis=1)
-        return w_other
-
-    def find_anchors(self, N, num_std=2, batch_size=100, in_class=False):
+    def find_anchors(self, N, num_std=2, batch_size=100):
 
         start, end = self.start, self.end
         w_avg, w_std = self.w_avg, self.w_std
-        if in_class:
-            w_avg, w_std = self.w_avg_other, self.w_std_other
-
         z = np.random.random((1, 512))
         mapping, synthesis = self.mapping, self.synthesis
         w_anchors = [mapping.predict(z)]
@@ -87,13 +69,7 @@ class DataGenerator:
         while len(w_anchors) < N:
             z_new = np.random.random((batch_size, 512))
             w_new = mapping.predict(z_new)
-            w_new_other = self.get_w_other(w_new)
-
-            if not in_class:
-                dists = np.array([np.linalg.norm(w_new[:, start:end, :] - w[:, start:end, :], axis=(1, 2)) for w in w_anchors]).flatten()
-            else:
-                dists = np.array([np.linalg.norm(w_new_other - self.get_w_other(w), axis=(1, 2)) for w in
-                                  w_anchors]).flatten()
+            dists = np.array([np.linalg.norm(w_new[:, start:end, :] - w[:, start:end, :], axis=(1, 2)) for w in w_anchors]).flatten()
 
             ids = dists > num_std * w_std
 
@@ -118,7 +94,7 @@ class DataGenerator:
         # print(np.mean(dists), w_std, "distance distribution")
         return w_anchors, z_anchors
 
-    def sample_around_anchors(self, K, N, w_anchors, z_anchors, num_std=0.3, noise_std=0.00015, batch_size=8000, force_dist=False):
+    def sample_around_anchors(self, K, N, w_anchors, z_anchors, num_std=0.3, noise_std=0.00015, batch_size=8000):
 
         mapping, synthesis = self.mapping, self.synthesis
         start, end = self.start, self.end
@@ -146,13 +122,8 @@ class DataGenerator:
                     print("warning: noise standard deviation set to be too low")
             w_nears = w_nears[:K]
 
-            if not force_dist:
-                z = np.random.random((K, 512))
-                w_random = mapping.predict(z)
-            else:
-                w_random, _ = self.find_anchors(K, 3, in_class=True)
-                w_random = np.array(w_random).squeeze(1)
-
+            z = np.random.random((K, 512))
+            w_random = mapping.predict(z)
 
             w_mix = np.concatenate([w_random[:, :start], w_nears[:, start:end], w_random[:, end:]], axis=1)
 
@@ -190,12 +161,12 @@ class DataGenerator:
 
 
 
-    def sample_batch(self, batch_size, K, N, num_std=0.1, noise_std=0.005, shuffle=True, swap=False, h=64, w=64, shuffle_resolutoin=False, force_dist=False):
+    def sample_batch(self, batch_size, K, N, num_std=0.1, noise_std=0.005, shuffle=True, swap=False, h=64, w=64, shuffle_resolutoin=False):
         if shuffle_resolutoin:
             self.shuffle_resolution()
         # images, labels = self.sample_around_anchors(K, N)
         w_anchors, z_anchors = self.find_anchors(N)
-        images, labels = self.sample_around_anchors(K, N, w_anchors, z_anchors, num_std, noise_std, force_dist=force_dist)
+        images, labels = self.sample_around_anchors(K, N, w_anchors, z_anchors, num_std, noise_std)
 
         images = self.resize(images, h, w)
         labels = np.array(labels)
