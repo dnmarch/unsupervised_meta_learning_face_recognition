@@ -24,6 +24,7 @@ class ProtoNet(tf.keras.Model):
             block_parts += [layers.BatchNormalization()]
             block_parts += [layers.Activation('relu')]
             block_parts += [layers.MaxPool2D()]
+            block_parts += [layers.Dropout(0.25)]
             block = tf.keras.Sequential(block_parts, name='conv_block_%d' % i)
             self.__setattr__("conv%d" % i, block)
             self.convs.append(block)
